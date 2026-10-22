@@ -1,0 +1,22 @@
+name: Space segment firmware
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  compile:
+    name: Compile for the AI Thinker ESP32-CAM
+    runs-on: ubuntu-latest
+    env:
+      ESP32_INDEX: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install the ESP32 core the team builds with
+        run: |
+          arduino-cli core update-index --additional-urls "$ESP32_INDEX"
+          arduino-cli core install esp32:esp32@3.3.12 --additional-urls "$ESP32_INDEX"
+      - name: Compile DUSK1_Telemetry_Cam
+        run: arduino-cli compile --fqbn esp32:esp32:esp32cam --warnings default space-segment/firmware/DUSK1_Telemetry_Cam
