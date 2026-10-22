@@ -50,18 +50,42 @@ class PagesAnnouncerTest(unittest.TestCase):
         self.assertIn("?live= link works meanwhile", rig.event_texts()[-1])
 
 
-class TunnelListenerTest(unittest.TestCase):
-    def test_listeners_hear_the_address_once(self):
+class FakeCloudflared:
+    def __init__(self, *lines):
+        self.stdout, self.args = iter(lines), None
+
+    def wait(self): return 1
+    def poll(self): return 1
+
+
+class TunnelTest(unittest.TestCase):
+    def test_listeners_hear_each_address_once(self):
         rig, heard = Rig(), []
         tunnel = CloudflareTunnel(8080, rig.events, "https://example.github.io/DUSK-1/", [heard.append])
-
-        class FakeProc:
-            stdout = iter(["starting\n", f"|  {LINK}  |\n", f"again {LINK}\n"])
-            def poll(self): return None
-        tunnel._proc = FakeProc()
-        tunnel._watch()
+        last = tunnel._watch(FakeCloudflared("starting\n", f"|  {LINK}  |\n", f"again {LINK}\n", "\n"))
         self.assertEqual(heard, [LINK])
+        self.assertEqual(last, f"again {LINK}")
         self.assertIn(f"Public dashboard: https://example.github.io/DUSK-1/?live={LINK}", rig.event_texts())
+
+    def test_a_closed_tunnel_reopens_over_http2_with_a_new_address(self):
+        rig, heard, runs, waits = Rig(), [], [], []
+        new_link = "https://other-words.trycloudflare.com"
+        procs = [FakeCloudflared(f"{LINK}\n", "ERR control stream error: rpc: connection closed\n"),
+                 FakeCloudflared(f"{new_link}\n")]
+
+        def popen(cmd, **kw):
+            runs.append(cmd)
+            if len(procs) == 1:
+                tunnel._stopped = True                 # end the test after the second tunnel
+            return procs.pop(0)
+        tunnel = CloudflareTunnel(8080, rig.events, "https://example.github.io/DUSK-1/", [heard.append],
+                                  popen=popen, sleep=waits.append)
+        tunnel._run("cloudflared")
+        self.assertEqual(heard, [LINK, new_link])
+        self.assertIn("http2", runs[0])
+        self.assertEqual(waits, [10])
+        self.assertIn("The public link closed (cloudflared: ERR control stream error: rpc: connection closed); "
+                      "opening a new one in 10 s", rig.event_texts())
 
 
 if __name__ == "__main__":

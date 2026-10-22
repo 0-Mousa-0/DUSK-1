@@ -26,6 +26,8 @@ RETRY_S = 3
 REPLAY_DELAY_S = {"telemetry": 1.0, "chunk": 0.14, "other": 0.01}
 
 PUBLIC_DASHBOARD_URL = "https://0-mousa-0.github.io/DUSK-1/"
+TUNNEL_RETRY_S = 10                   # a closed public link reopens after 10 s, backing off to 5 min
+TUNNEL_RETRY_MAX_S = 300
 
 # --share also points the public dashboard at the live link (announce.py, through the GitHub CLI)
 PAGES_REPO = "0-Mousa-0/DUSK-1"
