@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+
+# Sessions saved by the backend (keep a recording in sample_data/ instead)
+dusk1_data/
+
+# Built files
+_site/
+ground-segment/ground-station/web/replay/
+build/
+node_modules/
+
+# Editors and systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

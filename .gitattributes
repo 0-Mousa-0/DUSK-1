@@ -1,0 +1,10 @@
+* text=auto
+
+# Windows launchers need CRLF
+*.bat text eol=crlf
+
+# Recorded radio sessions: exact bytes (boot noise, CR LF inside lines), never converted
+*.log binary
+
+*.png binary
+*.jpg binary
