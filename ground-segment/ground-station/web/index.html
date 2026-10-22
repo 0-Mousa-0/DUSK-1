@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>DUSK-1 Ground Station</title>
+<meta name="description" content="DUSK-1 ground station dashboard - Team Dusk, Tuwaiq Academy Space Science Bootcamp, CanSat 2026">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<!-- fonts load in the background: a slow font server never delays the dashboard -->
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Unbounded:wght@700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+<canvas id="dawn" aria-hidden="true"></canvas>
+<header>
+  <div class="brand"><svg width="40" height="40" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="19" fill="#0D1330" stroke="#E8ECFF" stroke-width="2"/><path d="M14 27a10 10 0 0 1 20 0z" fill="#FF8C42"/><path d="M5 27h38" stroke="#E8ECFF" stroke-width="2"/><ellipse cx="24" cy="25" rx="22" ry="6.5" transform="rotate(-20 24 25)" fill="none" stroke="#A58BFF" stroke-width="2"/></svg>
+    <div><b id="hName">DUSK-1</b><div>GROUND STATION · TEAM DUSK</div></div></div>
+  <div class="hr"><span class="pill" id="hClock"></span><span class="pill" id="hPkt"></span><button class="pill" id="modeBtn" type="button"></button><span class="pill" id="hLink"></span></div>
+</header>
+<nav id="tabs" aria-label="Sections"></nav>
+<main>
+<!-- ============ OVERVIEW ============ -->
+<section class="tab" id="s-overview">
+  <div class="panel"><div class="ph"><h2>Mission status</h2><span id="mStat"></span></div><div class="kv" id="mKv"></div><p class="n" id="mNote"></p></div>
+  <div class="panel"><div class="ph"><h2>Live telemetry</h2><span class="tag" id="srcTag"></span></div><div class="tg" id="tg"></div></div>
+  <div class="g2">
+    <div class="panel"><div class="ph"><h2>Attitude</h2><span class="tag" id="motionTag">—</span></div><div class="row" style="align-items:center;gap:16px"><div id="horizon" style="flex:0 0 200px;max-width:100%"></div><div class="kv" id="attKv" style="flex:1 1 200px;grid-template-columns:1fr"></div></div></div>
+    <div class="panel"><div class="ph"><h2>Latest picture</h2><span class="tag" id="lastPicTag">—</span></div><div id="lastPic"></div></div>
+  </div>
+</section>
+<!-- ============ CAMERA ============ -->
+<section class="tab" id="s-camera">
+  <div class="g21">
+    <div class="panel">
+      <div class="ph"><h2>Camera playback</h2><span class="tag" id="camTag"></span></div>
+      <div class="viewer" id="viewer"><div class="emp">No pictures yet.<br>The CanSat sends one every 15 s.</div></div>
+      <div class="ctrl">
+        <button class="btn ic" id="cFirst" type="button" aria-label="First picture">⏮</button>
+        <button class="btn ic" id="cPrev" type="button" aria-label="Previous picture">◀</button>
+        <button class="btn pri" id="cPlay" type="button">Play</button>
+        <button class="btn ic" id="cNext" type="button" aria-label="Next picture">▶</button>
+        <button class="btn ic" id="cLast" type="button" aria-label="Newest picture">⏭</button>
+        <input type="range" id="cSlider" min="0" max="0" value="0" aria-label="Picture timeline">
+        <span class="m" id="cCount" style="font-size:12px;color:var(--mu);min-width:64px;text-align:right">0 / 0</span>
+      </div>
+      <div class="ctrl">
+        <label style="width:130px">Speed<select id="cSpeed"><option value="0.5">0.5 pictures/s</option><option value="1" selected>1 picture/s</option><option value="2">2 pictures/s</option><option value="4">4 pictures/s</option></select></label>
+        <label class="c"><input type="checkbox" id="cLoop" checked>Loop</label>
+        <label class="c"><input type="checkbox" id="cFollow" checked>Follow live</label>
+        <span class="m" style="font-size:11px;color:var(--mu)">Keys: ← → step · space play</span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="ph"><h2>Incoming</h2><span class="tag" id="progTag">idle</span></div>
+      <div class="prog"><i id="progBar"></i></div>
+      <p class="n" id="progTxt">Waiting for the next picture.</p>
+      <div class="kv" id="picKv" style="grid-template-columns:1fr;margin-top:12px"></div>
+      <p class="n" id="picNote"></p>
+    </div>
+  </div>
+  <div class="panel"><div class="ph"><h2>All pictures</h2><span class="tag" id="stripTag">0</span></div><div class="strip" id="strip"></div></div>
+</section>
+<!-- ============ CHARTS ============ -->
+<section class="tab" id="s-charts"><div class="row"><span class="m" style="color:var(--mu);font-size:11px">RANGE</span><span id="rng" class="row"></span><span class="tag">Gaps = no telemetry</span></div><div class="chs" id="chs"></div></section>
+<!-- ============ COMMANDS ============ -->
+<section class="tab" id="s-cmd">
+  <div class="note" id="cmdNote"></div>
+  <div class="g2">
+    <div class="panel"><div class="ph"><h2>Command the CanSat</h2><span class="tag" id="cmdTag"></span></div>
+      <div class="row" id="cmdBtns"></div>
+      <div class="row" style="margin-top:12px;align-items:end"><label style="flex:1 1 200px">Custom command (as typed in the Serial Monitor)<input id="cmdText" maxlength="100" placeholder="e.g. bps 1500"></label><button class="btn" id="cmdSend" type="button">Send</button></div>
+      <p class="n">Each command travels laptop → backend → Ground OBC → ground radio → CanSat. Replies from the CanSat appear in the console.</p>
+    </div>
+    <div class="panel"><div class="ph"><h2>Command history</h2></div><div id="cmdHist"></div></div>
+  </div>
+  <div class="panel"><div class="ph"><h2>CanSat console</h2><span class="tag">start-up checks and replies</span></div><div class="con" id="console"></div></div>
+</section>
+<!-- ============ DATA ============ -->
+<section class="tab" id="s-data"><div class="panel"><div class="ph"><h2>Telemetry data</h2><div class="row"><span class="tag" id="rowTag">0 rows</span><a class="btn pri" id="csvLink" href="#" style="text-decoration:none">Download CSV</a><button class="btn" id="csvBtn" type="button">Copy CSV</button></div></div><div class="tw" id="tbl"></div></div></section>
+<!-- ============ LOG ============ -->
+<section class="tab" id="s-log"><div class="panel"><div class="ph"><h2>Mission event log</h2><div class="row" id="lf"></div></div><div id="evs"></div></div></section>
+<!-- ============ SYSTEM ============ -->
+<section class="tab" id="s-system">
+  <div class="panel"><div class="ph"><h2>Ground segment</h2><span class="tag" id="chainTag"></span></div><div class="chain" id="chain"></div></div>
+  <div class="g2">
+    <div class="panel"><div class="ph"><h2>Ground OBC (UNO R4 WiFi)</h2><span class="tag" id="gsTag">no status yet</span></div><div class="kv" id="gsKv" style="grid-template-columns:1fr"></div></div>
+    <div class="panel"><div class="ph"><h2>Link quality</h2></div><div class="kv" id="lqKv" style="grid-template-columns:1fr"></div></div>
+  </div>
+  <div class="g2">
+    <div class="panel"><div class="ph"><h2>Mission</h2></div><div class="fg"><label>Mission name<input data-k="name"></label><label>Team<input data-k="team"></label><label>Launch site<input data-k="site"></label></div></div>
+    <div class="panel"><div class="ph"><h2>Alerts</h2></div><div class="fg"><label>Temperature max (°C)<input type="number" data-k="tMax"></label><label>High acceleration (m/s²)<input type="number" data-k="aHigh"></label><label>Free fall below (m/s²)<input type="number" step="0.5" data-k="aFree"></label></div><div class="row" style="margin-top:12px"><button class="btn" id="clrBtn" type="button">Clear screen data</button></div><p class="n">Clearing only empties this screen. The backend keeps every file in its session folder.</p></div>
+  </div>
+  <div class="panel"><div class="ph"><h2>How to go live</h2></div><ol class="n" style="margin:0;padding-left:18px;display:grid;gap:4px" id="howTo"></ol></div>
+</section>
+</main>
+<div id="tip"></div>
+<dialog id="csvd"><h2>Telemetry CSV</h2><textarea id="csvT" rows="9" readonly></textarea><div class="row" style="margin-top:10px"><button class="btn" id="csvCp" type="button">Copy</button><button class="btn" id="csvX" type="button">Close</button></div><p class="n" id="csvM"></p></dialog>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

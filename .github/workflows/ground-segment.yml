@@ -1,0 +1,43 @@
+name: Ground segment
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ground-station:
+    name: Backend and dashboard tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ground-segment/ground-station
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Backend tests (Python)
+        run: python -m unittest discover -s tests -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Dashboard tests (JavaScript)
+        run: npm test
+      - name: Every dashboard module parses
+        run: for f in $(find web/js -name '*.js'); do node --check "$f" || exit 1; done
+      - name: The recorded bench session exports a replay
+        run: python -m dusk1_ground --replay sample_data/bench_2026-10-21_raw.log --export-replay /tmp/replay
+
+  obc-firmware:
+    name: Compile the Ground OBC for the UNO R4 WiFi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install the UNO R4 core the team builds with
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install arduino:renesas_uno@1.6.0
+      - name: Compile DUSK1_GroundOBC_R4
+        run: arduino-cli compile --fqbn arduino:renesas_uno:unor4wifi --warnings default ground-segment/obc-firmware/DUSK1_GroundOBC_R4

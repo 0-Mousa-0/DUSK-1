@@ -1,0 +1,9 @@
+{
+  "name": "dusk1-ground-station-web",
+  "private": true,
+  "description": "DUSK-1 dashboard: ES modules, no build step. Tests use the Node built-in test runner.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"tests/js/*.test.js\""
+  }
+}

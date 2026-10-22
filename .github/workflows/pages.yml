@@ -1,0 +1,46 @@
+name: Public dashboard (GitHub Pages)
+
+on:
+  push:
+    branches: [ground-segment]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dashboard + replay of the recorded bench session
+        working-directory: ground-segment/ground-station
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/_site"
+          cp -r web/. "$GITHUB_WORKSPACE/_site/"
+          python -m dusk1_ground --replay sample_data/bench_2026-10-21_raw.log \
+            --export-replay "$GITHUB_WORKSPACE/_site/replay" --title "Bench test 2026-10-21"
+          touch "$GITHUB_WORKSPACE/_site/.nojekyll"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
