@@ -30,6 +30,16 @@ jobs:
           python -m dusk1_ground --replay sample_data/bench_2026-10-21_raw.log \
             --export-replay "$GITHUB_WORKSPACE/_site/replay" --title "Bench test 2026-10-21"
           touch "$GITHUB_WORKSPACE/_site/.nojekyll"
+      - name: Live ground station announced by the backend (--share sets LIVE_URL)
+        env:
+          LIVE_URL: ${{ vars.LIVE_URL }}
+        run: |
+          if [[ "$LIVE_URL" =~ ^https://[a-z0-9-]+\.trycloudflare\.com$ ]]; then
+            printf '{"url": "%s", "announced": "%s"}\n' "$LIVE_URL" "$(date -u +%FT%TZ)" > _site/live.json
+            echo "live.json -> $LIVE_URL"
+          else
+            echo "No live ground station announced"
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

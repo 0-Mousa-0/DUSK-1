@@ -19,7 +19,7 @@ echo   1 = USB:   Ground OBC (UNO R4 WiFi) plugged into this laptop      [recomm
 echo   2 = Wi-Fi: this laptop is on DUSK1-GROUND, Ground OBC at 192.168.4.1
 echo   3 = USB:   ground radio plugged straight into this laptop
 echo   4 = Demo:  play back the recorded bench session (no hardware)
-echo   5 = USB + public link: like 1, and anyone can watch read-only
+echo   5 = USB + public: like 1, and anyone can watch live, read-only, at 0-mousa-0.github.io/DUSK-1
 echo.
 set /p MODE=Choose 1, 2, 3, 4 or 5 and press Enter:
 

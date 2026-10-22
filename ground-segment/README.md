@@ -141,7 +141,7 @@ finds Python by itself, installs `pyserial`, lists the COM ports and opens the d
 | **2** Wi-Fi | the R4 over DUSK1-GROUND (join that Wi-Fi first) |
 | **3** USB, radio only | the ground radio plugged straight into the laptop, 57 600 baud |
 | **4** Demo | replay of the recorded bench session, no hardware |
-| **5** USB + public link | like 1, and prints a public read-only link anyone can open |
+| **5** USB + public | like 1, and anyone can watch it live, read-only, at **https://0-mousa-0.github.io/DUSK-1/** |
 
 **Any system:**
 
@@ -152,7 +152,7 @@ python -m dusk1_ground --serial COM5                     # UNO R4 WiFi on USB
 python -m dusk1_ground                                   # Wi-Fi, Ground OBC at 192.168.4.1:5760
 python -m dusk1_ground --serial COM7 --baud 57600        # ground radio straight on USB
 python -m dusk1_ground --replay sample_data/bench_2026-10-21_raw.log --loop
-python -m dusk1_ground --serial COM5 --share             # + public read-only link (needs cloudflared)
+python -m dusk1_ground --serial COM5 --share             # + live on the public dashboard (cloudflared, gh)
 python -m dusk1_ground --host 0.0.0.0                    # other laptops open http://<this-laptop>:8080
 ```
 
@@ -165,7 +165,8 @@ Then open **http://localhost:8080**. (`python dusk1_backend.py ...` still works,
 | `--speed`, `--loop` | replay speed, replay forever |
 | `--host`, `--port` | where the dashboard is served (default 127.0.0.1:8080) |
 | `--data` | where sessions are saved (default `ground-station/dusk1_data`) |
-| `--share` | open a Cloudflare quick tunnel: a public, read-only live link |
+| `--share` | open a Cloudflare quick tunnel (a public, read-only live link) and point the public dashboard at it |
+| `--no-pages` | with `--share`: only print the link, leave the public dashboard on the recording |
 | `--lan-commands` | with `--host 0.0.0.0`: laptops on the same private network may send commands too |
 | `--replay FILE --export-replay DIR` | write a replay for the public dashboard and exit |
 
@@ -205,6 +206,7 @@ its last 8 kB when the program was closed.
 | `commands.py` | `CommandPolicy` (who may command) and `CommandService` (validate, send, report) |
 | `server.py` | `DashboardServer`: static files, SSE, polling, state, CSV, pictures, commands |
 | `sharing.py` | `CloudflareTunnel`: the public read-only link |
+| `announce.py` | `PagesAnnouncer`: points the public dashboard at that link (`LIVE_URL` + a Pages redeploy) |
 | `replay_export.py` | a recorded `raw.log` → `replay.json` + pictures for the public dashboard |
 | `cli.py` | the composition root: reads the options and wires everything together |
 
@@ -293,11 +295,12 @@ classDiagram
     LinkMonitor --> MissionState
     LinkMonitor --> LineSource
     CloudflareTunnel ..> DashboardServer : exposes read-only
+    CloudflareTunnel --> PagesAnnouncer : tells the address
 ```
 
 | Principle | Where |
 |---|---|
-| **Single responsibility** | parsing (`protocol`), state (`state`), files (`storage`), pictures (`pictures`), transport (`server`), sharing (`sharing`) are separate; `cli` only wires |
+| **Single responsibility** | parsing (`protocol`), state (`state`), files (`storage`), pictures (`pictures`), transport (`server`), sharing (`sharing`), announcing it (`announce`) are separate; `cli` only wires |
 | **Open/closed** | a new kind of line is a new `LineHandler` in the chain; a new input is a new `LineSource`; a new event destination is a new sink for `EventReporter` |
 | **Liskov substitution** | Wi-Fi, USB and replay sources are interchangeable: the decoder only ever sees `sink(line)` |
 | **Interface segregation** | handlers get a `DecoderContext`, not the whole backend; the replay exporter's storage implements only what a session needs |
@@ -365,8 +368,9 @@ mission name and alert limits).
 | Opened at | Sources |
 |---|---|
 | `http://localhost:8080` (the backend) | **LIVE · BACKEND** (commands allowed), then DEMO |
-| `https://0-mousa-0.github.io/DUSK-1/` | **REPLAY · RECORDED** (the bench session, repeating), then DEMO |
+| `https://0-mousa-0.github.io/DUSK-1/` | **LIVE · PUBLIC LINK** (read-only) while a ground station runs with `--share`, otherwise **REPLAY · RECORDED** (the bench session, repeating); then DEMO |
 | `...?live=https://<words>.trycloudflare.com` | **LIVE · PUBLIC LINK** (read-only), then REPLAY, DEMO |
+| `...?replay` | the recording first, even during a live session |
 | `...?demo` | the simulator first: a whole flight (pad, launch, parachute, landing) every 4 minutes |
 
 ```mermaid
@@ -443,7 +447,7 @@ classDiagram
 | `js/core/store.js` | `MissionStore`: the only place mission data lives; ingests the backend's messages |
 | `js/core/alerts.js` | `AlertMonitor`: alert rules as data (add a rule, nothing else changes) |
 | `js/core/settings.js`, `commands.js`, `format.js` | per-viewer settings, command presets and history, formatting |
-| `js/sources/*.js` | `LiveSource` (SSE locally, polling over the public link), `ReplaySource`, `DemoSource` |
+| `js/sources/*.js` | `LiveSource` (SSE locally, polling over the public link), `ReplaySource`, `DemoSource`; `findAnnouncedLive` reads `live.json` |
 | `js/ui/app.js` | `DashboardApp`: tabs, active source, redraws; views never talk to each other |
 | `js/ui/*-view.js` | one class per tab; the cards, charts and filters are tables of data |
 | `js/ui/background.js` | the dawn sky, on its own canvas |
@@ -456,12 +460,41 @@ classDiagram
   `sample_data/bench_2026-10-21_raw.log` (exported by the real decoder) and publishes
   **https://0-mousa-0.github.io/DUSK-1/** on every push to this branch.
 * **Live, read-only, during a session:** choose **5** in the launcher (or add `--share`). The backend opens a free
-  Cloudflare quick tunnel and prints the link to share, e.g.
-  `https://0-mousa-0.github.io/DUSK-1/?live=https://some-words.trycloudflare.com`. Viewers can watch everything,
-  and commands stay with the ground station laptop. Cloudflare quick tunnels buffer streaming responses, so
-  viewers through the link poll `/api/poll` once a second; the laptop itself streams. The tunnel address changes
-  on every run.
+  Cloudflare quick tunnel and prints the link, e.g.
+  `https://0-mousa-0.github.io/DUSK-1/?live=https://some-words.trycloudflare.com`, which works at once.
+  Viewers can watch everything, and commands stay with the ground station laptop. Cloudflare quick tunnels
+  buffer streaming responses, so viewers through the link poll `/api/poll` once a second; the laptop itself
+  streams. The tunnel address changes on every run.
+* **The plain address goes live by itself.** `announce.PagesAnnouncer` stores the tunnel address in the
+  repository's Actions variable `LIVE_URL` and re-runs the Pages workflow, which writes it to `live.json`.
+  About a minute later **https://0-mousa-0.github.io/DUSK-1/** opens the live data; the backend reports
+  `Public dashboard is live`. When the session ends, visitors find the link dead and get the recording again.
+  This step uses the GitHub CLI logged in to an account that can write to this repository (`gh auth login`);
+  without it, the `?live=` link still works.
+
+```mermaid
+sequenceDiagram
+    participant BE as Backend (--share)
+    participant CF as cloudflared
+    participant GH as GitHub (gh CLI)
+    participant P as GitHub Pages
+    participant V as Visitor
+    BE->>CF: tunnel to localhost:8080
+    CF-->>BE: https://words.trycloudflare.com
+    BE->>GH: variable set LIVE_URL, workflow run pages.yml
+    GH->>P: deploy web/ + replay + live.json
+    V->>P: open 0-mousa-0.github.io/DUSK-1
+    P-->>V: dashboard, live.json
+    V->>CF: GET /api/state (still alive?)
+    CF-->>V: hello
+    loop every second
+        V->>CF: GET /api/poll?after=N
+        CF-->>V: new telemetry, pictures, events
+    end
+```
+
   cloudflared: `winget install Cloudflare.cloudflared`, or the single `cloudflared.exe` from its GitHub releases.
+  gh: `winget install GitHub.cli`, or the single `gh.exe` from its GitHub releases.
 
 <p align="center"><img src="../docs/assets/dashboard-public-readonly.png" alt="The Commands tab seen through the public link: read-only, buttons disabled" width="80%"></p>
 
@@ -499,3 +532,4 @@ deployment.
 | the radio on micro-USB has no COM port | install the FTDI driver (Device Manager → *FT230X Basic UART* → *Update driver*) |
 | `Python was not found` | the launcher finds Python itself; otherwise install it from python.org |
 | the public link says `BACKEND OFFLINE` | the laptop or its tunnel stopped: restart with choice 5 and share the new link |
+| the public dashboard still plays the recording during a live session | wait for `Public dashboard is live` (about a minute) and reload; if the backend says `Could not put the live link on the public dashboard`, run `gh auth login` |

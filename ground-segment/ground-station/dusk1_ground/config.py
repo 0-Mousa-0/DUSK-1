@@ -26,3 +26,10 @@ RETRY_S = 3
 REPLAY_DELAY_S = {"telemetry": 1.0, "chunk": 0.14, "other": 0.01}
 
 PUBLIC_DASHBOARD_URL = "https://0-mousa-0.github.io/DUSK-1/"
+
+# --share also points the public dashboard at the live link (announce.py, through the GitHub CLI)
+PAGES_REPO = "0-Mousa-0/DUSK-1"
+PAGES_BRANCH = "ground-segment"
+PAGES_WORKFLOW = "pages.yml"
+PAGES_LIVE_VARIABLE = "LIVE_URL"      # Actions variable the Pages build writes to live.json
+PAGES_UPDATE_TIMEOUT_S = 300

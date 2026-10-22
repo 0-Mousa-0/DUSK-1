@@ -2,13 +2,16 @@
 // store and the views, and starts. This is the only file that knows every class.
 //
 //   http://localhost:8080                        served by the backend      -> LIVE, then DEMO
-//   https://0-mousa-0.github.io/DUSK-1/           GitHub Pages               -> REPLAY, then DEMO
+//   https://0-mousa-0.github.io/DUSK-1/           GitHub Pages               -> LIVE while a ground station
+//                                                announces itself (live.json), else REPLAY; then DEMO
 //   ...?live=https://x.trycloudflare.com         public read-only live link -> LIVE, REPLAY, DEMO
+//   ...?replay                                   the recording first, even during a live session
 //   ...?demo                                     start with the simulator
 import { AlertMonitor } from './core/alerts.js';
 import { CommandHistory } from './core/commands.js';
 import { Settings } from './core/settings.js';
 import { MissionStore } from './core/store.js';
+import { findAnnouncedLive } from './sources/announced-live.js';
 import { DemoSource } from './sources/demo-source.js';
 import { LiveSource } from './sources/live-source.js';
 import { ReplaySource } from './sources/replay-source.js';
@@ -29,10 +32,12 @@ async function reachable(url, method = 'GET') {
 
 async function chooseSources(params) {
   const live = params.get('live'), replayUrl = params.get('replay') || 'replay/replay.json';
-  const [backend, recorded] = await Promise.all([live ? false : reachable('api/state'), reachable(replayUrl, 'HEAD')]);
+  const [backend, recorded, announced] = await Promise.all([live ? false : reachable('api/state'), reachable(replayUrl, 'HEAD'),
+    live || params.has('replay') ? null : findAnnouncedLive()]);
   const list = [];
   if (live) list.push(new LiveSource(live));
   else if (backend) list.push(new LiveSource(''));
+  else if (announced) list.push(new LiveSource(announced));
   if (recorded) list.push(new ReplaySource(replayUrl));
   list.push(new DemoSource());
   if (params.has('demo')) list.unshift(list.pop());

@@ -4,7 +4,7 @@
     python -m dusk1_ground --serial COM5                 UNO R4 WiFi on USB (115200)
     python -m dusk1_ground --serial COM7 --baud 57600    ground radio straight on USB
     python -m dusk1_ground --replay raw.log --loop       play back a saved session
-    python -m dusk1_ground ... --share                   + public read-only live link
+    python -m dusk1_ground ... --share                   + public read-only live link, also on GitHub Pages
     python -m dusk1_ground --replay raw.log --export-replay web/replay
     add  --host 0.0.0.0  so other laptops on the same network can open http://<this-laptop-ip>:8080
 """
@@ -13,6 +13,7 @@ import datetime as dt
 import os
 import sys
 
+from .announce import PagesAnnouncer
 from .bus import MessageBus
 from .clock import SystemClock
 from .commands import CommandPolicy, CommandService
@@ -46,6 +47,8 @@ def parse_args(argv=None):
     ap.add_argument("--lan-commands", action="store_true", help="with --host 0.0.0.0: laptops on the same private "
                                                                 "network may send commands too (default: only this laptop)")
     ap.add_argument("--pages-url", default=PUBLIC_DASHBOARD_URL, help="public dashboard used in the shared link")
+    ap.add_argument("--no-pages", action="store_true", help="with --share: only print the link, leave the public "
+                                                            "dashboard on the recording")
     ap.add_argument("--export-replay", metavar="OUT_DIR", help="with --replay: write a replay for the public "
                                                                "dashboard and exit")
     ap.add_argument("--title", help="with --export-replay: name shown in the dashboard")
@@ -95,8 +98,10 @@ def main(argv=None) -> None:
     events.info("SYSTEM", f"Backend started, source: {source.label}")
     source.start()
     LinkMonitor(state, source, bus, events, clock).start()
-    tunnel = CloudflareTunnel(args.port, events, args.pages_url) if args.share else None
-    if tunnel:
+    tunnel = None
+    if args.share:
+        listeners = [] if args.no_pages else [PagesAnnouncer(events, args.pages_url)]
+        tunnel = CloudflareTunnel(args.port, events, args.pages_url, listeners)
         tunnel.start()
     try:
         server.serve_forever()

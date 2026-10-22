@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { findAnnouncedLive } from '../../web/js/sources/announced-live.js';
 import { DemoSource } from '../../web/js/sources/demo-source.js';
 import { LiveSource } from '../../web/js/sources/live-source.js';
 import { ReplaySource } from '../../web/js/sources/replay-source.js';
@@ -55,6 +56,20 @@ test('live source on the ground station laptop sends commands when the backend a
   assert.deepEqual(await src.send('k'), { state: 'SENT', note: 'sent' });
   assert.deepEqual(posts, [['/api/command', '{"text":"k"}']]);
   assert.equal(src.csvUrl(), '/api/telemetry.csv');
+});
+
+test('the public dashboard goes live only while the announced ground station answers', async () => {
+  const site = (pointer, backend) => async url => {
+    if (url === 'live.json') return pointer ? { ok: true, json: async () => pointer } : { ok: false };
+    if (url === 'https://abc.trycloudflare.com/api/state' && backend) return { ok: true, json: async () => backend };
+    throw new TypeError('Failed to fetch');                          // a tunnel that is gone
+  };
+  const pointer = { url: 'https://abc.trycloudflare.com/' };
+  assert.equal(await findAnnouncedLive({ fetchImpl: site(pointer, { type: 'hello' }) }), 'https://abc.trycloudflare.com');
+  assert.equal(await findAnnouncedLive({ fetchImpl: site(pointer, null) }), null);                // session over
+  assert.equal(await findAnnouncedLive({ fetchImpl: site(null, null) }), null);                   // nothing announced
+  assert.equal(await findAnnouncedLive({ fetchImpl: site(pointer, { error: 1 }) }), null);        // not a ground station
+  assert.equal(await findAnnouncedLive({ fetchImpl: site({ url: 'javascript:alert(1)' }, null) }), null);
 });
 
 test('replay plays recorded messages at their pace, retimed to now', async () => {

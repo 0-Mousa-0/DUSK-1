@@ -4,14 +4,15 @@
 
 starts `cloudflared tunnel --url http://localhost:8080`, which prints an address like
 https://some-words.trycloudflare.com. Anyone can open that address (the full live
-dashboard), or the public dashboard on GitHub Pages with ?live=<that address>.
+dashboard), or the public dashboard on GitHub Pages with ?live=<that address>; the
+listeners (announce.PagesAnnouncer) also put it on the public dashboard itself.
 Visitors are read-only: see commands.CommandPolicy. The address changes every run."""
 import os
 import re
 import shutil
 import subprocess
 import threading
-from typing import Optional
+from typing import Callable, Iterable, Optional, Sequence
 from urllib.parse import quote
 
 from .events import EventReporter
@@ -23,18 +24,24 @@ WINDOWS_PATHS = (r"C:\Program Files (x86)\cloudflared\cloudflared.exe",
                  r"%LOCALAPPDATA%\Programs\dusk1-tools\cloudflared.exe")
 
 
-def find_cloudflared() -> Optional[str]:
-    found = shutil.which("cloudflared")
+def find_program(name: str, windows_paths: Sequence[str]) -> Optional[str]:
+    found = shutil.which(name)
     if found:
         return found
-    return next((p for p in map(os.path.expandvars, WINDOWS_PATHS) if os.path.isfile(p)), None)
+    return next((p for p in map(os.path.expandvars, windows_paths) if os.path.isfile(p)), None)
+
+
+def find_cloudflared() -> Optional[str]:
+    return find_program("cloudflared", WINDOWS_PATHS)
 
 
 class CloudflareTunnel:
-    def __init__(self, local_port: int, events: EventReporter, pages_url: str):
+    def __init__(self, local_port: int, events: EventReporter, pages_url: str,
+                 listeners: Iterable[Callable[[str], None]] = ()):
         self.local_port = local_port
         self.events = events
         self.pages_url = pages_url
+        self.listeners = list(listeners)          # told the public address once it is known
         self.public_url: Optional[str] = None
         self._proc: Optional[subprocess.Popen] = None
 
@@ -59,6 +66,8 @@ class CloudflareTunnel:
                 self.events.info("SYSTEM", f"Public read-only link: {self.public_url}")
                 self.events.info("SYSTEM", f"Public dashboard: {dashboard}")
                 print("\n  Share this link (read-only, live):\n    " + dashboard + "\n", flush=True)
+                for listener in self.listeners:
+                    listener(self.public_url)
         if self._proc.poll() is not None:
             self.events.warning("SYSTEM", "The public link closed (cloudflared stopped)")
 
